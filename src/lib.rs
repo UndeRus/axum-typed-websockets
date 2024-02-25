@@ -309,22 +309,21 @@ where
             .map_err(Error::Ws)?);
 
         if let Some(msg) = msg {
-            let msg = match msg {
-                ws::Message::Text(msg) => msg.into_bytes(),
-                ws::Message::Binary(bytes) => bytes,
-                ws::Message::Close(frame) => {
-                    return Poll::Ready(Some(Ok(Message::Close(frame))));
+            match msg {
+                ws::Message::Text(msg) => {
+                    let msg = C::decode(msg).map(Message::Item).map_err(Error::Codec);
+                    Poll::Ready(Some(msg))
                 }
-                ws::Message::Ping(buf) => {
-                    return Poll::Ready(Some(Ok(Message::Ping(buf))));
+                ws::Message::Binary(bytes) => {
+                    let msg = String::from_utf8(bytes)
+                        .map_err(|e| crate::Error::Ws(axum::Error::new(e)))?;
+                    let msg = C::decode(msg).map(Message::Item).map_err(Error::Codec);
+                    Poll::Ready(Some(msg))
                 }
-                ws::Message::Pong(buf) => {
-                    return Poll::Ready(Some(Ok(Message::Pong(buf))));
-                }
-            };
-
-            let msg = C::decode(msg).map(Message::Item).map_err(Error::Codec);
-            Poll::Ready(Some(msg))
+                ws::Message::Close(frame) => Poll::Ready(Some(Ok(Message::Close(frame)))),
+                ws::Message::Ping(buf) => Poll::Ready(Some(Ok(Message::Ping(buf)))),
+                ws::Message::Pong(buf) => Poll::Ready(Some(Ok(Message::Pong(buf)))),
+            }
         } else {
             Poll::Ready(None)
         }
@@ -344,7 +343,7 @@ where
 
     fn start_send(mut self: Pin<&mut Self>, msg: Message<S>) -> Result<(), Self::Error> {
         let msg = match msg {
-            Message::Item(buf) => ws::Message::Binary(C::encode(buf).map_err(Error::Codec)?),
+            Message::Item(buf) => ws::Message::Text(C::encode(buf).map_err(Error::Codec)?),
             Message::Ping(buf) => ws::Message::Ping(buf),
             Message::Pong(buf) => ws::Message::Pong(buf),
             Message::Close(frame) => ws::Message::Close(frame),
@@ -373,12 +372,12 @@ pub trait Codec {
     type Error;
 
     /// Encode a message.
-    fn encode<S>(msg: S) -> Result<Vec<u8>, Self::Error>
+    fn encode<S>(msg: S) -> Result<String, Self::Error>
     where
         S: Serialize;
 
     /// Decode a message.
-    fn decode<R>(buf: Vec<u8>) -> Result<R, Self::Error>
+    fn decode<R>(buf: String) -> Result<R, Self::Error>
     where
         R: DeserializeOwned;
 }
@@ -395,18 +394,18 @@ pub struct JsonCodec;
 impl Codec for JsonCodec {
     type Error = serde_json::Error;
 
-    fn encode<S>(msg: S) -> Result<Vec<u8>, Self::Error>
+    fn encode<S>(msg: S) -> Result<String, Self::Error>
     where
         S: Serialize,
     {
-        serde_json::to_vec(&msg)
+        serde_json::to_string(&msg)
     }
 
-    fn decode<R>(buf: Vec<u8>) -> Result<R, Self::Error>
+    fn decode<R>(buf: String) -> Result<R, Self::Error>
     where
         R: DeserializeOwned,
     {
-        serde_json::from_slice(&buf)
+        serde_json::from_str(&buf)
     }
 }
 
