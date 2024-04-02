@@ -5,7 +5,7 @@
 //! ```rust
 //! use axum::{
 //!     Router,
-//!     response::IntoResponse,
+//!     response::{IntoResponse, Response},
 //!     routing::get,
 //! };
 //! use axum_typed_websockets::{Message, WebSocket, WebSocketUpgrade};
@@ -31,7 +31,7 @@
 //!     // Upgrade the request to a WebSocket connection where the server sends
 //!     // messages of type `ServerMsg` and the clients sends `ClientMsg`
 //!     ws: WebSocketUpgrade<ServerMsg, ClientMsg>,
-//! ) -> impl IntoResponse {
+//! ) -> Response {
 //!     ws.on_upgrade(ping_pong_socket)
 //! }
 //!
@@ -115,7 +115,7 @@ use axum::{
     async_trait,
     extract::{ws, FromRequestParts},
     http::request::Parts,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
 };
 use futures_util::{Sink, SinkExt, Stream, StreamExt};
 use serde::{de::DeserializeOwned, Serialize};
@@ -193,7 +193,7 @@ impl<S, R, C> WebSocketUpgrade<S, R, C> {
     /// the stream.
     ///
     /// This is analagous to [`axum::extract::ws::WebSocketUpgrade::on_upgrade`].
-    pub fn on_upgrade<F, Fut>(self, callback: F) -> impl IntoResponse
+    pub fn on_upgrade<F, Fut>(self, callback: F) -> Response
     where
         F: FnOnce(WebSocket<S, R, C>) -> Fut + Send + 'static,
         Fut: Future<Output = ()> + Send + 'static,
